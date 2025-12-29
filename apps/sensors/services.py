@@ -8,7 +8,14 @@ from django.db import connection, models
 from django.utils import timezone
 
 from .models import Sensor, SensorApiKey
-from .schemas import ALLOWED_COLUMN_TYPES, validate_column_schema
+from .schemas import (
+    ALLOWED_COLUMN_TYPES, 
+    validate_column_schema,
+    get_column_type,
+    is_computed_field,
+    get_computed_columns,
+    get_regular_columns,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +54,11 @@ class SensorTableService:
             "timestamp TIMESTAMPTZ NOT NULL",
         ]
         
-        for col_name, col_type in columns.items():
+        for col_name, col_def in columns.items():
             # Sanitize column name
             safe_name = re.sub(r'[^a-z0-9_]', '', col_name.lower())
+            # Get column type (works for both simple and extended format)
+            col_type = get_column_type(col_def)
             column_defs.append(f"{safe_name} {col_type}")
         
         column_defs.append("created_at TIMESTAMPTZ DEFAULT NOW()")
@@ -126,7 +135,8 @@ class SensorTableService:
         values = [experiment_id, timestamp]
         placeholders = ['%s', '%s']
         
-        for col_name in sensor.column_schema.keys():
+        # Handle all columns (both regular and computed)
+        for col_name, col_def in sensor.column_schema.items():
             if col_name in data:
                 columns.append(col_name)
                 values.append(data[col_name])
@@ -247,5 +257,144 @@ def create_sensor(
     
     # Create the data table
     SensorTableService.create_sensor_table(sensor)
+    
+    return sensor
+
+
+# Configuration format version for export/import compatibility
+CONFIG_FORMAT_VERSION = "1.0"
+
+
+def export_sensor_config(sensor: Sensor) -> dict:
+    """
+    Export a sensor's configuration to a dictionary that can be saved as JSON.
+    
+    The exported configuration includes:
+    - Sensor name and type
+    - Description and metadata
+    - Full column schema (including computed fields with their functions)
+    
+    Does NOT include:
+    - Sensor ID (new one will be generated on import)
+    - Table name (generated based on type and ID)
+    - API keys (security-sensitive)
+    - Statistics (reading_count, last_reading_at)
+    - User references (created_by)
+    - Timestamps (created_at, updated_at)
+    - Experiment association (can be set on import)
+    
+    Returns:
+        dict: Configuration dictionary suitable for JSON serialization
+    """
+    return {
+        "config_format_version": CONFIG_FORMAT_VERSION,
+        "sensor": {
+            "name": sensor.name,
+            "sensor_type": sensor.sensor_type,
+            "description": sensor.description,
+            "metadata": sensor.metadata,
+            "column_schema": sensor.column_schema,
+        }
+    }
+
+
+def validate_sensor_config(config: dict) -> tuple[bool, str]:
+    """
+    Validate an imported sensor configuration.
+    
+    Args:
+        config: Configuration dictionary to validate
+        
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    if not isinstance(config, dict):
+        return False, "Configuration must be a dictionary"
+    
+    # Check for required top-level keys
+    if "sensor" not in config:
+        return False, "Configuration must have a 'sensor' key"
+    
+    sensor_config = config.get("sensor", {})
+    
+    # Validate required sensor fields
+    required_fields = ["name", "sensor_type", "column_schema"]
+    for field in required_fields:
+        if field not in sensor_config:
+            return False, f"Sensor configuration missing required field: '{field}'"
+    
+    # Validate name
+    name = sensor_config.get("name", "")
+    if not name or not isinstance(name, str):
+        return False, "Sensor name must be a non-empty string"
+    if len(name) > 255:
+        return False, "Sensor name must be 255 characters or less"
+    
+    # Validate sensor_type
+    sensor_type = sensor_config.get("sensor_type", "")
+    if not sensor_type or not isinstance(sensor_type, str):
+        return False, "Sensor type must be a non-empty string"
+    if len(sensor_type) > 50:
+        return False, "Sensor type must be 50 characters or less"
+    
+    # Validate column_schema using existing schema validation
+    column_schema = sensor_config.get("column_schema", {})
+    is_valid, schema_error = validate_column_schema(column_schema)
+    if not is_valid:
+        return False, f"Invalid column schema: {schema_error}"
+    
+    # Validate optional fields if present
+    if "description" in sensor_config:
+        if not isinstance(sensor_config["description"], str):
+            return False, "Description must be a string"
+    
+    if "metadata" in sensor_config:
+        if not isinstance(sensor_config["metadata"], dict):
+            return False, "Metadata must be a dictionary"
+    
+    return True, ""
+
+
+def import_sensor_config(
+    config: dict,
+    created_by,
+    experiment=None,
+    name_override: str = None
+) -> Sensor:
+    """
+    Import a sensor configuration and create a new sensor.
+    
+    Args:
+        config: Configuration dictionary (from export_sensor_config or JSON file)
+        created_by: User creating the sensor
+        experiment: Optional experiment to associate with
+        name_override: If provided, use this name instead of the one in config
+        
+    Returns:
+        Sensor: The newly created sensor
+        
+    Raises:
+        ValueError: If the configuration is invalid
+    """
+    # Validate the configuration
+    is_valid, error = validate_sensor_config(config)
+    if not is_valid:
+        raise ValueError(error)
+    
+    sensor_config = config["sensor"]
+    
+    # Use override name or the one from config
+    name = name_override if name_override else sensor_config["name"]
+    
+    # Create the sensor with the imported configuration
+    sensor = create_sensor(
+        name=name,
+        sensor_type=sensor_config["sensor_type"],
+        column_schema=sensor_config["column_schema"],
+        created_by=created_by,
+        experiment=experiment,
+        description=sensor_config.get("description", ""),
+        metadata=sensor_config.get("metadata", {}),
+    )
     
     return sensor

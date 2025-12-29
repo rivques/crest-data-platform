@@ -121,3 +121,32 @@ class SensorApiKey(models.Model):
     def verify_key(self, raw_key: str) -> bool:
         """Verify that a raw key matches this API key."""
         return self.key_hash == self.hash_key(raw_key)
+
+
+class ComputedFieldError(models.Model):
+    """
+    Logs errors that occur when computing a field value.
+    Helps users debug their compute functions.
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sensor = models.ForeignKey(
+        Sensor,
+        on_delete=models.CASCADE,
+        related_name='computed_field_errors'
+    )
+    field_name = models.CharField(max_length=100, help_text="The computed field that failed")
+    error_type = models.CharField(max_length=100, help_text="Type of error (e.g., 'SyntaxError', 'TimeoutError')")
+    error_message = models.TextField(help_text="Full error message")
+    input_data = models.JSONField(help_text="The input data that caused the error")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'computed_field_errors'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['sensor', '-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"Error in {self.field_name} for sensor {self.sensor_id}: {self.error_type}"

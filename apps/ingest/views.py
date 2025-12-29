@@ -4,8 +4,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import BasePermission
 
-from apps.sensors.models import Sensor
+from apps.sensors.models import ComputedFieldError
 from apps.sensors.services import SensorTableService
+from apps.sensors.schemas import get_computed_columns, get_regular_columns
+from apps.sensors.compute import compute_field_values
 from apps.experiments.models import Experiment
 from .authentication import SensorApiKeyAuthentication
 from .serializers import IngestRequestSerializer, IngestResponseSerializer
@@ -65,24 +67,54 @@ class IngestView(APIView):
         
         readings = data.get('readings', [])
         
+        # Get schema information - separate regular and computed columns
+        regular_columns = get_regular_columns(sensor.column_schema)
+        computed_columns = get_computed_columns(sensor.column_schema)
+        
         # Validate readings against sensor schema
         valid_readings = []
-        schema_columns = set(sensor.column_schema.keys())
+        all_compute_errors = []
         
         for reading in readings:
-            # Extract only the columns defined in the schema (plus timestamp)
+            # Extract only the regular columns defined in the schema (plus timestamp)
             clean_reading = {}
             
             # Handle timestamp
             if 'timestamp' in reading:
                 clean_reading['timestamp'] = reading['timestamp']
             
-            # Handle schema columns
-            for col in schema_columns:
+            # Handle regular (non-computed) schema columns
+            for col in regular_columns.keys():
                 if col in reading:
                     clean_reading[col] = reading[col]
             
+            # Compute values for computed columns
+            if computed_columns:
+                computed_values, compute_errors = compute_field_values(
+                    sensor=sensor,
+                    reading=clean_reading,
+                    computed_columns=computed_columns
+                )
+                # Add computed values to the reading
+                clean_reading.update(computed_values)
+                # Collect errors for logging
+                all_compute_errors.extend(compute_errors)
+            
             valid_readings.append(clean_reading)
+        
+        # Log any computation errors
+        if all_compute_errors:
+            for error in all_compute_errors:
+                try:
+                    ComputedFieldError.objects.create(
+                        sensor=sensor,
+                        field_name=error['field_name'],
+                        error_type=error['error_type'],
+                        error_message=error['error_message'],
+                        input_data=error['input_data'],
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to log compute error: {e}")
         
         # Insert readings
         try:
@@ -131,10 +163,14 @@ class IngestStatusView(APIView):
     
     def get(self, request):
         sensor = request.sensor
+        regular_columns = get_regular_columns(sensor.column_schema)
+        computed_columns = get_computed_columns(sensor.column_schema)
+        
         return Response({
             'status': 'ok',
             'sensor_id': sensor.id,
             'sensor_name': sensor.name,
             'sensor_type': sensor.sensor_type,
-            'expected_columns': list(sensor.column_schema.keys()),
+            'expected_columns': list(regular_columns.keys()),
+            'computed_columns': list(computed_columns.keys()),
         })

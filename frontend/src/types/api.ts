@@ -34,7 +34,7 @@ export interface Sensor {
   table_name: string
   description: string
   metadata: Record<string, unknown>
-  column_schema: Record<string, string>
+  column_schema: ColumnSchema
   experiment: string | null
   experiment_name?: string
   is_active: boolean
@@ -45,7 +45,21 @@ export interface Sensor {
   last_reading_at: string | null
   reading_count: number
   api_key_count: number
+  computed_field_error_count: number
 }
+
+/**
+ * Column definition can be either:
+ * - Simple: just the type string (e.g., "DOUBLE PRECISION")
+ * - Extended: object with type, computed flag, and optional compute_function
+ */
+export type ColumnDefinition = string | {
+  type: string
+  computed?: boolean
+  compute_function?: string
+}
+
+export type ColumnSchema = Record<string, ColumnDefinition>
 
 export interface SensorCreateRequest {
   name: string
@@ -53,7 +67,35 @@ export interface SensorCreateRequest {
   description?: string
   experiment?: string | null
   metadata?: Record<string, unknown>
-  column_schema: Record<string, string>
+  column_schema: ColumnSchema
+}
+
+export interface SensorConfig {
+  config_format_version: string
+  sensor: {
+    name: string
+    sensor_type: string
+    description: string
+    metadata: Record<string, unknown>
+    column_schema: ColumnSchema
+  }
+}
+
+export interface SensorImportRequest {
+  config: SensorConfig
+  name_override?: string
+  experiment?: string
+}
+
+export interface ComputedFieldError {
+  id: string
+  sensor: string
+  sensor_name?: string
+  field_name: string
+  error_type: string
+  error_message: string
+  input_data: Record<string, unknown>
+  created_at: string
 }
 
 export interface SensorApiKey {

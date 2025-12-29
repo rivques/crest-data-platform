@@ -39,7 +39,7 @@ docker compose exec web python manage.py createdevadmin
 4. Access the services:
    - **Django API**: http://localhost:8000
    - **Django Admin**: http://localhost:8000/admin (login: admin / admin)
-    - **Frontend**: http://localhost:3000
+   - **Frontend**: http://localhost:3000
    - **Grafana**: http://localhost:3001 (login: admin / admin)
 
 ### Running Locally (Development)
@@ -140,6 +140,8 @@ VITE_API_URL=http://localhost:8000
 |----------|--------|-------------|
 | `/api/sensors/` | GET/POST | List/create sensors |
 | `/api/sensors/{id}/` | GET/PUT/DELETE | Get/update/delete sensor |
+| `/api/sensors/{id}/export_config/` | GET | Export sensor configuration as JSON |
+| `/api/sensors/import/` | POST | Import sensor configuration from JSON |
 | `/api/column-types/` | GET | List allowed PostgreSQL column types for sensor schemas |
 | `/api/api-keys/` | GET/POST | List/create API keys |
 | `/api/api-keys/{id}/revoke/` | POST | Revoke an API key |
@@ -234,6 +236,92 @@ Example payload (create sensor):
 ```
 
 Use `/api/column-types/` to discover allowed column types.
+
+## Sensor Configuration Export/Import
+
+Sensors can be exported to JSON configuration files and re-imported later to create identical sensor setups. This is useful for:
+- Backing up sensor configurations
+- Replicating sensor setups across environments
+- Sharing sensor schemas between projects
+- Version controlling sensor configurations
+
+### Exporting a Sensor Configuration
+
+```bash
+# Using curl
+curl -H "Authorization: Bearer <your-jwt-token>" \
+     http://localhost:8000/api/sensors/<sensor-id>/export_config/ \
+     -o sensor_config.json
+```
+
+The exported JSON includes:
+- `config_format_version`: Version of the export format (currently "1.0")
+- `sensor.name`: Sensor name
+- `sensor.sensor_type`: Sensor type label
+- `sensor.description`: Sensor description
+- `sensor.metadata`: Custom metadata dictionary
+- `sensor.column_schema`: Full column schema including computed fields
+
+**What's NOT exported** (for security/portability):
+- Sensor ID and table name (generated on import)
+- API keys
+- Statistics (reading_count, last_reading_at)
+- User/timestamp information
+- Experiment association
+
+### Importing a Sensor Configuration
+
+```bash
+# Using curl
+curl -X POST \
+     -H "Authorization: Bearer <your-jwt-token>" \
+     -H "Content-Type: application/json" \
+     -d '{"config": <exported-config-json>, "name_override": "New Sensor Name"}' \
+     http://localhost:8000/api/sensors/import/
+```
+
+Import options:
+- `config` (required): The exported configuration object
+- `name_override` (optional): Use a different name than the one in the config
+- `experiment` (optional): UUID of an experiment to associate the sensor with
+
+### Example: Export and Import Round-Trip
+
+```python
+import requests
+
+BASE_URL = "http://localhost:8000"
+TOKEN = "your-jwt-token"
+HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+
+# Export a sensor's configuration
+sensor_id = "your-sensor-uuid"
+export_response = requests.get(
+    f"{BASE_URL}/api/sensors/{sensor_id}/export_config/",
+    headers=HEADERS
+)
+config = export_response.json()
+
+# Save to file
+import json
+with open("sensor_config.json", "w") as f:
+    json.dump(config, f, indent=2)
+
+# Later: import to create a new sensor
+with open("sensor_config.json") as f:
+    config = json.load(f)
+
+import_response = requests.post(
+    f"{BASE_URL}/api/sensors/import/",
+    headers=HEADERS,
+    json={
+        "config": config,
+        "name_override": "Cloned Sensor"  # Optional new name
+    }
+)
+new_sensor = import_response.json()
+print(f"Created sensor: {new_sensor['id']}")
+```
 
 ## Project Structure
 

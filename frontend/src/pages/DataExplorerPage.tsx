@@ -84,9 +84,11 @@ export default function DataExplorerPage() {
 
   // Get numeric columns for charting
   const numericColumns = sensor?.column_schema
-    ? Object.entries(sensor.column_schema)
-        .filter(([, type]) => type.includes('DOUBLE') || type.includes('INTEGER') || type.includes('REAL'))
-        .map(([col]) => col)
+    ? Object.keys(sensor.column_schema).filter((col) => {
+        const t = sensor.column_schema[col]
+        const typeStr = typeof t === 'string' ? t : t?.type ?? ''
+        return /(?:DOUBLE|INTEGER|REAL)/i.test(typeStr)
+      })
     : []
 
   const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']

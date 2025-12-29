@@ -25,7 +25,7 @@ export default function LoginPage() {
     try {
       await login(data.username, data.password)
       navigate('/dashboard')
-    } catch (err) {
+    } catch {
       setError('Invalid username or password')
     }
   }

@@ -396,3 +396,215 @@ class TestIngestWithInactiveSensor:
         )
         # Should be rejected with 401 or 403
         assert response.status_code in [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN]
+
+
+# ============================================================================
+# Tests for Ingestion with Computed Fields
+# ============================================================================
+
+from apps.sensors.models import ComputedFieldError
+
+
+@pytest.fixture
+def computed_sensor(user):
+    """Create a sensor with computed fields for ingest tests."""
+    sensor = create_sensor(
+        name='Computed Ingest Sensor',
+        sensor_type='temperature',
+        column_schema={
+            'temp_c': 'DOUBLE PRECISION',
+            'temp_f': {
+                'type': 'DOUBLE PRECISION',
+                'computed': True,
+                'compute_function': 'def compute(data):\n    return data["temp_c"] * 9/5 + 32',
+            },
+        },
+        created_by=user,
+    )
+    yield sensor
+    try:
+        SensorTableService.drop_sensor_table(sensor.table_name)
+    except Exception:
+        pass
+
+
+@pytest.fixture
+def computed_api_key(computed_sensor, user):
+    """Create an API key for the computed sensor."""
+    raw_key = SensorApiKey.generate_key()
+    api_key_obj = SensorApiKey.objects.create(
+        sensor=computed_sensor,
+        name='Computed Sensor Key',
+        key_hash=SensorApiKey.hash_key(raw_key),
+        key_prefix=raw_key[:8],
+        created_by=user,
+    )
+    api_key_obj.raw_key = raw_key
+    return api_key_obj
+
+
+@pytest.fixture
+def computed_sensor_client(api_client, computed_api_key):
+    """Return API client authenticated for the computed sensor."""
+    api_client.credentials(HTTP_AUTHORIZATION=f'Api-Key {computed_api_key.raw_key}')
+    return api_client
+
+
+@pytest.mark.django_db
+class TestIngestWithComputedFields:
+    """Tests for data ingestion with computed fields."""
+    
+    def test_ingest_computes_field_value(self, computed_sensor_client, computed_sensor):
+        """Test that computed fields are calculated on ingest."""
+        data = {
+            'readings': [
+                {'timestamp': '2025-01-01T12:00:00Z', 'temp_c': 0}
+            ]
+        }
+        
+        response = computed_sensor_client.post(
+            reverse('ingest'),
+            data,
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_201_CREATED
+        
+        # Check that temp_f was computed (0°C = 32°F)
+        with connection.cursor() as cursor:
+            cursor.execute(f"SELECT temp_c, temp_f FROM {computed_sensor.table_name}")
+            row = cursor.fetchone()
+            assert row[0] == 0.0  # temp_c
+            assert row[1] == 32.0  # temp_f (computed)
+    
+    def test_ingest_computes_multiple_readings(self, computed_sensor_client, computed_sensor):
+        """Test that computed fields work with batch ingestion."""
+        data = {
+            'readings': [
+                {'timestamp': '2025-01-01T12:00:00Z', 'temp_c': 0},
+                {'timestamp': '2025-01-01T12:01:00Z', 'temp_c': 100},
+                {'timestamp': '2025-01-01T12:02:00Z', 'temp_c': -40},  # -40 is the same in C and F!
+            ]
+        }
+        
+        response = computed_sensor_client.post(
+            reverse('ingest'),
+            data,
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data['readings_accepted'] == 3
+        
+        # Check computed values
+        with connection.cursor() as cursor:
+            cursor.execute(f"SELECT temp_c, temp_f FROM {computed_sensor.table_name} ORDER BY timestamp")
+            rows = cursor.fetchall()
+            assert rows[0] == (0.0, 32.0)
+            assert rows[1] == (100.0, 212.0)
+            assert rows[2] == (-40.0, -40.0)
+    
+    def test_ingest_status_shows_computed_columns(self, computed_sensor_client, computed_sensor):
+        """Test that status endpoint shows which columns are computed."""
+        response = computed_sensor_client.get(reverse('ingest-status'))
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert 'temp_c' in response.data['expected_columns']
+        assert 'temp_f' in response.data['computed_columns']
+        assert 'temp_f' not in response.data['expected_columns']  # Computed fields not expected from sensor
+
+
+@pytest.fixture
+def failing_compute_sensor(user):
+    """Create a sensor with a compute function that will fail."""
+    sensor = create_sensor(
+        name='Failing Compute Sensor',
+        sensor_type='test',
+        column_schema={
+            'value': 'DOUBLE PRECISION',
+            'bad_computed': {
+                'type': 'DOUBLE PRECISION',
+                'computed': True,
+                'compute_function': 'def compute(data):\n    return data["missing_key"]',
+            },
+        },
+        created_by=user,
+    )
+    yield sensor
+    try:
+        SensorTableService.drop_sensor_table(sensor.table_name)
+    except Exception:
+        pass
+
+
+@pytest.fixture
+def failing_api_key(failing_compute_sensor, user):
+    """Create an API key for the failing compute sensor."""
+    raw_key = SensorApiKey.generate_key()
+    api_key_obj = SensorApiKey.objects.create(
+        sensor=failing_compute_sensor,
+        name='Failing Sensor Key',
+        key_hash=SensorApiKey.hash_key(raw_key),
+        key_prefix=raw_key[:8],
+        created_by=user,
+    )
+    api_key_obj.raw_key = raw_key
+    return api_key_obj
+
+
+@pytest.fixture
+def failing_sensor_client(api_client, failing_api_key):
+    """Return API client authenticated for the failing compute sensor."""
+    api_client.credentials(HTTP_AUTHORIZATION=f'Api-Key {failing_api_key.raw_key}')
+    return api_client
+
+
+@pytest.mark.django_db
+class TestIngestComputeErrors:
+    """Tests for error handling in computed fields during ingestion."""
+    
+    def test_ingest_logs_compute_errors(self, failing_sensor_client, failing_compute_sensor):
+        """Test that compute errors are logged to the error table."""
+        data = {
+            'readings': [
+                {'timestamp': '2025-01-01T12:00:00Z', 'value': 42}
+            ]
+        }
+        
+        # Should still succeed (data is stored, error is logged)
+        response = failing_sensor_client.post(
+            reverse('ingest'),
+            data,
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_201_CREATED
+        
+        # Check that error was logged
+        errors = ComputedFieldError.objects.filter(sensor=failing_compute_sensor)
+        assert errors.count() == 1
+        
+        error = errors.first()
+        assert error.field_name == 'bad_computed'
+        assert 'KeyError' in error.error_type or 'Execution' in error.error_type
+    
+    def test_ingest_stores_null_on_compute_error(self, failing_sensor_client, failing_compute_sensor):
+        """Test that computed field is NULL when computation fails."""
+        data = {
+            'readings': [
+                {'timestamp': '2025-01-01T12:00:00Z', 'value': 42}
+            ]
+        }
+        
+        failing_sensor_client.post(
+            reverse('ingest'),
+            data,
+            format='json'
+        )
+        
+        # Check that regular value is stored but computed is NULL
+        with connection.cursor() as cursor:
+            cursor.execute(f"SELECT value, bad_computed FROM {failing_compute_sensor.table_name}")
+            row = cursor.fetchone()
+            assert row[0] == 42.0  # Regular value stored
+            assert row[1] is None  # Computed value is NULL due to error
