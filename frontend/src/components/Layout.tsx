@@ -9,6 +9,7 @@ import {
   LogOut,
   Menu,
   X,
+  Book,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -18,6 +19,7 @@ const navItems = [
   { path: '/sensors', label: 'Sensors', icon: Cpu },
   { path: '/api-keys', label: 'API Keys', icon: Key },
   { path: '/data', label: 'Data Explorer', icon: BarChart3 },
+  { path: '/docs', label: 'Documentation', icon: Book },
 ]
 
 export default function Layout() {

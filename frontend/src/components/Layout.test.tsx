@@ -62,6 +62,7 @@ describe('Layout', () => {
     expect(screen.getByText('Sensors')).toBeInTheDocument()
     expect(screen.getByText('API Keys')).toBeInTheDocument()
     expect(screen.getByText('Data Explorer')).toBeInTheDocument()
+    expect(screen.getByText('Documentation')).toBeInTheDocument()
   })
 
   it('displays user information', () => {
@@ -89,6 +90,7 @@ describe('Layout', () => {
     expect(screen.getByText('Sensors').closest('a')).toHaveAttribute('href', '/sensors')
     expect(screen.getByText('API Keys').closest('a')).toHaveAttribute('href', '/api-keys')
     expect(screen.getByText('Data Explorer').closest('a')).toHaveAttribute('href', '/data')
+    expect(screen.getByText('Documentation').closest('a')).toHaveAttribute('href', '/docs')
   })
 
   it('toggles mobile sidebar when menu button is clicked', async () => {
