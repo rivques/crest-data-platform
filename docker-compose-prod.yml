@@ -109,7 +109,7 @@ services:
       DOMAINS: ${DOMAINS}
     ports:
       - "8002:80"
-      - "443:443"
+      - "8442:443"
     volumes:
       - ./deploy/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
       - letsencrypt:/etc/letsencrypt:ro
