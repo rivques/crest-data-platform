@@ -1,0 +1,17 @@
+# Dependencies
+node_modules
+
+# Test files
+**/*.test.ts
+**/*.test.tsx
+src/test
+vitest.config.ts
+
+# Development files
+*.md
+.git
+.gitignore
+
+# Build outputs
+dist
+coverage
