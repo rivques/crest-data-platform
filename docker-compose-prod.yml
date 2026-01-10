@@ -108,7 +108,7 @@ services:
       DOMAIN: ${DOMAIN}
       DOMAINS: ${DOMAINS}
     ports:
-      - "80:80"
+      - "8002:80"
       - "443:443"
     volumes:
       - ./deploy/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
