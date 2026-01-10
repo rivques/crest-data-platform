@@ -23,8 +23,54 @@ server {
     root /var/www/certbot;
   }
 
+  # Static/media (served directly)
+  location /static/ {
+    alias /static/;
+  }
+
+  location /media/ {
+    alias /media/;
+  }
+
+  # API + Admin
+  location /api/ {
+    proxy_pass http://django;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 30s;
+  }
+
+  # Grafana (served from subpath)
+  location /grafana/ {
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Prefix /grafana;
+
+    proxy_http_version 1.1;
+    proxy_redirect off;
+
+    proxy_pass http://grafana/;
+  }
+
+  location /admin/ {
+    proxy_pass http://django;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  # Frontend
   location / {
-    return 301 https://$host$request_uri;
+    proxy_pass http://frontend;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
   }
 }
 
