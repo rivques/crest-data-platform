@@ -1,4 +1,4 @@
-import { AlertTriangle, Lock, Server, Shield, Zap } from 'lucide-react'
+import { AlertTriangle, Lock, Shield, Zap } from 'lucide-react'
 import { CodeBlock, Step } from '../../components/docs'
 
 export default function DeploymentPage() {
@@ -6,7 +6,8 @@ export default function DeploymentPage() {
     <article className="prose prose-primary max-w-none">
       <h1>Production Deployment</h1>
       <p className="lead text-xl text-gray-600">
-        Deploy the CREST Data Platform to a VPS with production security, SSL/TLS, and proper secrets management.
+        Deploy the CREST Data Platform to a VPS using a single production Docker Compose file, with SSL/TLS, a reverse
+        proxy, and secrets provided via environment variables.
       </p>
 
       <h2>Pre-Deployment Checklist</h2>
@@ -19,7 +20,7 @@ export default function DeploymentPage() {
           </li>
           <li className="flex items-start gap-2">
             <AlertTriangle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
-            <span><strong>Domain Name</strong> – Pointed to your server's IP address</span>
+            <span><strong>Domain Name</strong> – Pointed to your server's IP address (A/AAAA records)</span>
           </li>
           <li className="flex items-start gap-2">
             <AlertTriangle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
@@ -28,10 +29,6 @@ export default function DeploymentPage() {
           <li className="flex items-start gap-2">
             <AlertTriangle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
             <span><strong>Git</strong> – For cloning the repository</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <AlertTriangle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
-            <span><strong>SSL Certificate</strong> – Obtain via Let's Encrypt (free) or your CA</span>
           </li>
         </ul>
       </div>
@@ -80,202 +77,87 @@ sudo su - crest`} />
 cd crest-data-platform`} />
         </Step>
 
-        <Step number={2} title="Create production .env file">
+        <Step number={2} title="Set production environment variables (no .env file)">
           <p className="text-gray-600 mb-3">
-            Copy <code className="bg-gray-100 px-1 rounded">.env.example</code> and update with strong, random values:
+            Production uses <code className="bg-gray-100 px-1 rounded">docker-compose-prod.yml</code> and reads secrets
+            from environment variables. Export them in your shell (or manage them via systemd/your secrets manager).
           </p>
-          <CodeBlock code={`cp .env.example .env
-nano .env  # or your favorite editor`} />
-          <p className="text-gray-600 mt-4 mb-3">
-            Set these to strong random values:
-          </p>
-          <CodeBlock language="bash" code={`# Generate strong random values
-openssl rand -base64 32  # for SECRET_KEY
-openssl rand -base64 16  # for DB_PASSWORD, GRAFANA_ADMIN_PASSWORD`} />
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-            <h4 className="font-semibold text-blue-800 mb-3">Production .env example:</h4>
-            <CodeBlock language="bash" code={`DEBUG=False
-SECRET_KEY=<random-base64-string>
+          <p className="text-gray-600 mt-4 mb-3">Generate strong random values:</p>
+          <CodeBlock language="bash" code={`openssl rand -base64 32  # SECRET_KEY
+openssl rand -base64 24  # DB_PASSWORD
+openssl rand -base64 24  # GRAFANA_ADMIN_PASSWORD`} />
+          <p className="text-gray-600 mt-4 mb-3">Example (replace values and domain):</p>
+          <CodeBlock language="bash" code={`export DOMAIN="example.com"
+export DOMAINS="example.com www.example.com"
+export CERTBOT_EMAIL="you@example.com"
 
-# Database
-DB_NAME=crest_prod
-DB_USER=crest_user
-DB_PASSWORD=<strong-random-password>
-DB_HOST=localhost
-DB_PORT=5432
+export SECRET_KEY="<random-base64-string>"
 
-# Domain (change to your domain)
-ALLOWED_HOSTS=api.example.com,example.com
-CORS_ALLOWED_ORIGINS=https://example.com,https://www.example.com
+export DB_NAME="crest_prod"
+export DB_USER="crest_user"
+export DB_PASSWORD="<strong-random-password>"
 
-# Grafana
-GRAFANA_ADMIN_PASSWORD=<strong-random-password>
+export ALLOWED_HOSTS="example.com,www.example.com"
+export CORS_ALLOWED_ORIGINS="https://example.com,https://www.example.com"
 
-# Media storage
-MEDIA_ROOT=/app/media`} />
-          </div>
-        </Step>
-
-        <Step number={3} title="Protect the .env file">
-          <CodeBlock code={`# Restrict permissions
-chmod 600 .env
-
-# Verify it's not world-readable
-ls -la .env`} />
+export GRAFANA_ADMIN_PASSWORD="<strong-random-password>"`} />
         </Step>
       </div>
 
-      <h2>Step 3: Set Up SSL/TLS with Let's Encrypt</h2>
-      <p>Use Certbot to obtain and auto-renew free SSL certificates.</p>
+      <h2>Step 3: Launch the Production Stack (Nginx + Certbot in Docker)</h2>
+      <p>
+        The production stack runs a reverse proxy and TLS automation inside Docker. The only public ports you should
+        expose are <code className="bg-gray-100 px-1 rounded">80</code> and{' '}
+        <code className="bg-gray-100 px-1 rounded">443</code>.
+      </p>
 
       <div className="not-prose">
-        <Step number={1} title="Install Certbot">
-          <CodeBlock code={`sudo apt install certbot python3-certbot-nginx -y`} />
-        </Step>
-
-        <Step number={2} title="Obtain certificate">
-          <CodeBlock code={`sudo certbot certonly --standalone -d example.com -d www.example.com`} />
-          <p className="text-gray-600 mt-3">
-            Certificates are stored in <code className="bg-gray-100 px-1 rounded">/etc/letsencrypt/live/example.com/</code>
-          </p>
-        </Step>
-
-        <Step number={3} title="Set up auto-renewal">
-          <CodeBlock code={`sudo certbot renew --dry-run
-sudo systemctl enable certbot.timer
-sudo systemctl start certbot.timer`} />
-        </Step>
-      </div>
-
-      <h2>Step 4: Configure Nginx Reverse Proxy</h2>
-      <p>Use Nginx to terminate SSL and route traffic to Docker containers.</p>
-
-      <div className="not-prose">
-        <Step number={1} title="Install Nginx">
-          <CodeBlock code={`sudo apt install nginx -y`} />
-        </Step>
-
-        <Step number={2} title="Create Nginx configuration">
+        <Step number={1} title="Start the containers (first boot)">
           <p className="text-gray-600 mb-3">
-            Create <code className="bg-gray-100 px-1 rounded">/etc/nginx/sites-available/crest</code>:
+            Start the core services with a short-lived “dummy” certificate so Nginx can come up immediately.
           </p>
-          <CodeBlock language="nginx" code={`upstream django {
-  server localhost:8000;
-}
-
-upstream frontend {
-  server localhost:3000;
-}
-
-# Redirect HTTP to HTTPS
-server {
-  listen 80;
-  server_name example.com www.example.com;
-  return 301 https://$server_name$request_uri;
-}
-
-# HTTPS server
-server {
-  listen 443 ssl http2;
-  server_name example.com www.example.com;
-
-  # SSL certificates
-  ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
-
-  # Security headers
-  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-  add_header X-Content-Type-Options "nosniff" always;
-  add_header X-Frame-Options "DENY" always;
-
-  # Logs
-  access_log /var/log/nginx/crest_access.log;
-  error_log /var/log/nginx/crest_error.log;
-
-  # Frontend (React)
-  location / {
-    proxy_pass http://frontend;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-  }
-
-  # API
-  location /api/ {
-    proxy_pass http://django;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_read_timeout 30s;
-  }
-
-  # Admin panel
-  location /admin/ {
-    proxy_pass http://django;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-  }
-
-  # Static files (if using whitenoise or similar)
-  location /static/ {
-    proxy_pass http://django;
-    proxy_set_header Host $host;
-  }
-}`} />
-        </Step>
-
-        <Step number={3} title="Enable the site">
-          <CodeBlock code={`sudo ln -s /etc/nginx/sites-available/crest /etc/nginx/sites-enabled/
-sudo nginx -t  # Test configuration
-sudo systemctl restart nginx`} />
-        </Step>
-      </div>
-
-      <h2>Step 5: Launch with Docker Compose</h2>
-
-      <div className="not-prose">
-        <Step number={1} title="Update docker-compose.yml for production">
-          <p className="text-gray-600 mb-3">
-            Modify ports to only listen on localhost (Nginx handles external traffic):
-          </p>
-          <CodeBlock language="yaml" code={`# In docker-compose.yml, change:
-web:
-  ports:
-    - "127.0.0.1:8000:8000"  # Only localhost
-
-frontend:
-  ports:
-    - "127.0.0.1:3000:3000"  # Only localhost
-
-grafana:
-  ports:
-    - "127.0.0.1:3001:3000"  # Only localhost`} />
-        </Step>
-
-        <Step number={2} title="Start services in production mode">
-          <CodeBlock code={`# Start all services (detached)
-docker compose up -d
+          <CodeBlock code={`docker compose -f docker-compose-prod.yml up -d --build db web frontend certbot-init nginx
 
 # Check status
-docker compose ps
+docker compose -f docker-compose-prod.yml ps
 
 # View logs
-docker compose logs -f web`} />
+docker compose -f docker-compose-prod.yml logs -f nginx`} />
         </Step>
 
-        <Step number={3} title="Create initial admin user">
-          <CodeBlock code={`docker compose exec web python manage.py createsuperuser
+        <Step number={2} title="Issue the real Let's Encrypt certificate">
+          <p className="text-gray-600 mb-3">
+            Use the webroot method (the reverse proxy serves the ACME challenge path). This command is typically run once
+            per domain change.
+          </p>
+          <CodeBlock code={`docker compose -f docker-compose-prod.yml run --rm certbot \
+  certonly --webroot -w /var/www/certbot \
+  -d example.com -d www.example.com \
+  --email you@example.com --agree-tos --no-eff-email
 
-# Or use dev admin with strong password:
-docker compose exec web python manage.py createdevadmin --password <your-strong-password>`} />
+# Reload Nginx to pick up the new certificate
+docker compose -f docker-compose-prod.yml exec nginx nginx -s reload`} />
+        </Step>
+
+        <Step number={3} title="Start auto-renewal">
+          <p className="text-gray-600 mb-3">
+            This runs <code className="bg-gray-100 px-1 rounded">certbot renew</code> on a schedule inside a container.
+          </p>
+          <CodeBlock code={`docker compose -f docker-compose-prod.yml up -d certbot
+
+# Optional: verify it can renew (should succeed when close to expiry)
+docker compose -f docker-compose-prod.yml logs -f certbot`} />
+        </Step>
+
+        <Step number={4} title="Create initial admin user">
+          <CodeBlock code={`docker compose -f docker-compose-prod.yml exec web python manage.py createsuperuser
+
+# Or use dev admin (still choose a strong password):
+docker compose -f docker-compose-prod.yml exec web python manage.py createdevadmin --password <your-strong-password>`} />
         </Step>
       </div>
 
-      <h2>Step 6: Set Up Monitoring and Backups</h2>
+      <h2>Step 4: Set Up Monitoring and Backups</h2>
 
       <h3>Database Backups</h3>
       <p>Set up automated daily backups of the PostgreSQL database:</p>
@@ -290,7 +172,9 @@ BACKUP_DIR="/backups/crest"
 TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
 BACKUP_FILE="$BACKUP_DIR/crest_backup_$TIMESTAMP.sql.gz"
 
-docker compose -f /path/to/crest-data-platform/docker-compose.yml exec -T db pg_dump -U crest crest | gzip > "$BACKUP_FILE"
+# Production compose file (update crest_user/crest_prod to match DB_USER/DB_NAME)
+docker compose -f /path/to/crest-data-platform/docker-compose-prod.yml exec -T db \
+  pg_dump -U crest_user crest_prod | gzip > "$BACKUP_FILE"
 
 # Keep only 7 days of backups
 find "$BACKUP_DIR" -name "crest_backup_*.sql.gz" -mtime +7 -delete
@@ -305,20 +189,24 @@ chmod +x /backups/backup-crest.sh
 
       <h3>Monitor Service Health</h3>
       <CodeBlock code={`# Check container status
-docker compose ps
+docker compose -f docker-compose-prod.yml ps
 
 # View resource usage
 docker stats
 
 # Check error logs
-docker compose logs web | grep -i error`} />
+docker compose -f docker-compose-prod.yml logs web | grep -i error`} />
 
-      <h2>Step 7: Post-Deployment Tasks</h2>
+      <h2>Step 5: Post-Deployment Tasks</h2>
 
       <h3>Configure Grafana Data Source</h3>
       <ol>
-        <li>Access Grafana at <code className="bg-gray-100 px-1 rounded">https://example.com:3001</code> (if exposed) or via localhost forwarding</li>
-        <li>Log in with admin credentials from <code className="bg-gray-100 px-1 rounded">.env</code></li>
+        <li>Access Grafana at <code className="bg-gray-100 px-1 rounded">https://example.com/grafana/</code></li>
+        <li>
+          Dashboards are viewable <strong>read-only without signing in</strong>. Use the Sign in option to log in as an
+          admin for editing.
+        </li>
+        <li>Log in with the admin password you configured for <code className="bg-gray-100 px-1 rounded">GRAFANA_ADMIN_PASSWORD</code></li>
         <li>Configure PostgreSQL data source (already provisioned, but verify)</li>
         <li>Create dashboards for key metrics</li>
       </ol>
@@ -342,16 +230,16 @@ curl -I https://example.com | grep -i "strict-transport"
       <p>To update the application after code changes:</p>
 
       <CodeBlock code={`# Pull latest changes
-git pull origin main
+    git pull origin main
 
-# Rebuild and restart services
-docker compose up -d --build
+    # Rebuild and restart services
+    docker compose -f docker-compose-prod.yml up -d --build
 
-# Run migrations
-docker compose exec web python manage.py migrate
+    # Run migrations (if you don't rely on container startup doing it)
+    docker compose -f docker-compose-prod.yml exec web python manage.py migrate
 
-# Check status
-docker compose logs -f web`} />
+    # Check status
+    docker compose -f docker-compose-prod.yml logs -f web`} />
 
       <h2>Security Considerations</h2>
 
@@ -362,10 +250,9 @@ docker compose logs -f web`} />
             Secrets Management
           </h4>
           <ul className="text-red-700 text-sm space-y-2 ml-4">
-            <li>• Store <code className="bg-red-100 px-1 rounded">.env</code> outside version control</li>
             <li>• Use environment variables for all sensitive values (never hardcode)</li>
-            <li>• Restrict <code className="bg-red-100 px-1 rounded">.env</code> file permissions to <code className="bg-red-100 px-1 rounded">600</code></li>
             <li>• Use a secrets manager (Vault, AWS Secrets Manager) for larger deployments</li>
+            <li>• If using systemd, store secrets in a root-owned EnvironmentFile and restrict permissions</li>
           </ul>
         </div>
 
@@ -376,6 +263,7 @@ docker compose logs -f web`} />
           </h4>
           <ul className="text-red-700 text-sm space-y-2 ml-4">
             <li>• Close unnecessary ports (only allow 22/SSH, 80/HTTP, 443/HTTPS)</li>
+            <li>• Grafana is served at <code className="bg-red-100 px-1 rounded">/grafana/</code>, so no extra port needs to be opened</li>
             <li>• Restrict SSH access (use key-based auth, disable root login)</li>
             <li>• Database should only be accessible from the Django container</li>
             <li>• Consider a WAF (Web Application Firewall) for additional protection</li>
@@ -405,8 +293,9 @@ docker compose logs -f web`} />
           <p className="text-red-700 text-sm mb-2">
             Django container is not responding. Check:
           </p>
-          <CodeBlock code={`docker compose logs web
-docker compose ps`} />
+          <CodeBlock code={`docker compose -f docker-compose-prod.yml ps
+docker compose -f docker-compose-prod.yml logs nginx
+docker compose -f docker-compose-prod.yml logs web`} />
         </div>
 
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -414,8 +303,8 @@ docker compose ps`} />
           <p className="text-red-700 text-sm mb-2">
             Check certbot status and logs:
           </p>
-          <CodeBlock code={`sudo systemctl status certbot.timer
-sudo journalctl -u certbot -n 20`} />
+          <CodeBlock code={`docker compose -f docker-compose-prod.yml ps certbot
+docker compose -f docker-compose-prod.yml logs --tail=200 certbot`} />
         </div>
 
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -423,8 +312,8 @@ sudo journalctl -u certbot -n 20`} />
           <p className="text-red-700 text-sm mb-2">
             Ensure PostgreSQL is running and credentials match:
           </p>
-          <CodeBlock code={`docker compose ps db
-docker compose logs db`} />
+          <CodeBlock code={`docker compose -f docker-compose-prod.yml ps db
+docker compose -f docker-compose-prod.yml logs db`} />
         </div>
       </div>
 

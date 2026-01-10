@@ -174,4 +174,11 @@ describe('LoginPage', () => {
     expect(usernameInput).toHaveAttribute('type', 'text')
     expect(passwordInput).toHaveAttribute('type', 'password')
   })
+
+  it('links to the docs from login page', () => {
+    renderLoginPage()
+
+    const docsLink = screen.getByRole('link', { name: /view the docs/i })
+    expect(docsLink).toHaveAttribute('href', '/docs')
+  })
 })

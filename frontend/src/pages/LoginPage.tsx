@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useAuthStore } from '../stores/authStore'
 import { FlaskConical, Loader2 } from 'lucide-react'
@@ -99,6 +99,15 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          <div className="mt-6 text-center text-sm text-gray-500">
+            <Link
+              to="/docs"
+              className="ml-1 font-medium text-primary-600 hover:text-primary-700 focus:outline-none focus:underline"
+            >
+              View the docs
+            </Link>
+          </div>
         </div>
       </div>
     </div>

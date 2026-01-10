@@ -44,14 +44,7 @@ function App() {
           <Route path="api-keys" element={<ApiKeysPage />} />
           <Route path="data/:sensorId?" element={<DataExplorerPage />} />
         </Route>
-        <Route
-          path="/docs"
-          element={
-            <ProtectedRoute>
-              <DocsLayout />
-            </ProtectedRoute>
-          }
-        >
+        <Route path="/docs" element={<DocsLayout />}>
           <Route index element={<OverviewPage />} />
           <Route path="setup" element={<SetupPage />} />
           <Route path="sensors" element={<SensorsTutorialPage />} />
