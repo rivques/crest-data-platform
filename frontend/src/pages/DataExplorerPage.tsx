@@ -17,7 +17,7 @@ import type { PaginatedResponse, Sensor, SensorDataResponse } from '../types/api
 
 export default function DataExplorerPage() {
   const { sensorId } = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [, setSearchParams] = useSearchParams()
   
   const [selectedSensor, setSelectedSensor] = useState(sensorId || '')
   const [limit, setLimit] = useState(100)
