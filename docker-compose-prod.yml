@@ -66,6 +66,8 @@ services:
       # Serve Grafana behind the reverse proxy at /grafana/
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
+      GF_SERVER_PROTOCOL: http
+      GF_SERVER_DOMAIN: ${DOMAIN}
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
