@@ -20,7 +20,7 @@ const navItems = [
   { path: '/sensors', label: 'Sensors', icon: Cpu },
   { path: '/api-keys', label: 'API Keys', icon: Key },
   { path: '/data', label: 'Raw Data Explorer', icon: Table },
-  { path: '/grafana', label: 'Grafana Charts', icon: LineChart}, // NOTE: won't work for local dev without proxy
+  { path: '/grafana/', label: 'Grafana Charts', icon: LineChart}, // NOTE: won't work for local dev without proxy
   { path: '/docs', label: 'Documentation', icon: Book },
 ]
 

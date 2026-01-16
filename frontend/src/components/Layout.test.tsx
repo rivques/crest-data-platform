@@ -91,7 +91,7 @@ describe('Layout', () => {
     expect(screen.getByText('Sensors').closest('a')).toHaveAttribute('href', '/sensors')
     expect(screen.getByText('API Keys').closest('a')).toHaveAttribute('href', '/api-keys')
     expect(screen.getByText('Raw Data Explorer').closest('a')).toHaveAttribute('href', '/data')
-    expect(screen.getByText('Grafana Charts').closest('a')).toHaveAttribute('href', '/grafana')
+    expect(screen.getByText('Grafana Charts').closest('a')).toHaveAttribute('href', '/grafana/')
     expect(screen.getByText('Documentation').closest('a')).toHaveAttribute('href', '/docs')
   })
 
