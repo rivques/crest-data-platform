@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import api from '../lib/api'
