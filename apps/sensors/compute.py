@@ -4,16 +4,22 @@ Sandboxed Python executor for computed sensor fields.
 This module provides a safe way to execute user-defined Python functions
 for computing sensor field values. It restricts access to dangerous
 operations while allowing HTTP requests for contextual data.
+
+Uses multiprocessing for true timeout enforcement - processes can be
+terminated if they exceed the timeout, unlike threads.
 """
 
 import logging
-import threading
+import multiprocessing
+from multiprocessing import Process, Queue
 import sys
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Maximum execution time for compute functions (seconds)
+# 15 seconds allows for HTTP requests to external APIs while still
+# protecting against runaway computations
 COMPUTE_TIMEOUT = 15
 
 # Safe built-in functions allowed in compute functions
@@ -164,13 +170,13 @@ def create_safe_requests():
 
 def run_with_timeout(func, args=(), kwargs=None, timeout=5):
     """
-    Run a function with a timeout using threading.
+    Run a function with a timeout using multiprocessing.
     
-    This is thread-safe and works in Django/WSGI environments where
-    signal-based timeouts don't work.
+    Uses a separate process that can be terminated if it exceeds the timeout,
+    providing true timeout enforcement unlike threading.
     
     Args:
-        func: Function to execute
+        func: Function to execute (must be picklable)
         args: Positional arguments for func
         kwargs: Keyword arguments for func
         timeout: Maximum execution time in seconds
@@ -185,29 +191,113 @@ def run_with_timeout(func, args=(), kwargs=None, timeout=5):
     if kwargs is None:
         kwargs = {}
     
-    result = [None]
-    exception = [None]
+    result_queue = Queue()
     
-    def target():
+    def target(result_q, fn, fn_args, fn_kwargs):
         try:
-            result[0] = func(*args, **kwargs)
+            result = fn(*fn_args, **fn_kwargs)
+            result_q.put(('success', result))
         except Exception as e:
-            exception[0] = e
+            # Serialize exception info since exceptions may not be picklable
+            result_q.put(('error', type(e).__name__, str(e)))
     
-    thread = threading.Thread(target=target, daemon=True)
-    thread.start()
-    thread.join(timeout)
+    process = Process(
+        target=target, 
+        args=(result_queue, func, args, kwargs),
+        daemon=True
+    )
+    process.start()
+    process.join(timeout)
     
-    if thread.is_alive():
-        # Thread is still running after timeout
-        # Note: We can't actually kill the thread in Python, but we can
-        # abandon it and raise an error
+    if process.is_alive():
+        # Process is still running after timeout - terminate it
+        process.terminate()
+        process.join(1)  # Give it a second to terminate gracefully
+        if process.is_alive():
+            process.kill()  # Force kill if still running
+            process.join()
         raise ComputeTimeoutError(f"Compute function timed out after {timeout} seconds")
     
-    if exception[0] is not None:
-        raise exception[0]
+    # Get result from queue
+    if result_queue.empty():
+        raise ComputeExecutionError("Compute function did not return a result")
     
-    return result[0]
+    status = result_queue.get()
+    if status[0] == 'success':
+        return status[1]
+    else:
+        # Re-raise the exception
+        error_type, error_msg = status[1], status[2]
+        if error_type == 'ComputeSecurityError':
+            raise ComputeSecurityError(error_msg)
+        elif error_type == 'ComputeTimeoutError':
+            raise ComputeTimeoutError(error_msg)
+        else:
+            raise ComputeExecutionError(f"{error_type}: {error_msg}")
+
+
+def _execute_in_sandbox(code: str, input_data: dict, allowed_modules: set, safe_builtins: dict) -> Any:
+    """
+    Execute compute code in a sandboxed environment.
+    This function is designed to be called in a subprocess.
+    
+    Args:
+        code: Python code that defines a 'compute' function
+        input_data: Dictionary of input values from sensor reading
+        allowed_modules: Set of module names that can be imported
+        safe_builtins: Dict of safe builtin functions
+    
+    Returns:
+        The computed value
+    """
+    import importlib
+    
+    # Create the safe importer instance
+    safe_importer = SafeImporter(allowed_modules)
+    
+    # Pre-import allowed modules and make them available
+    preloaded_modules = {}
+    for module_name in allowed_modules:
+        try:
+            preloaded_modules[module_name] = importlib.import_module(module_name)
+        except ImportError:
+            pass  # Module not available, skip it
+    
+    # Create a custom __builtins__ dict that includes __import__
+    custom_builtins = dict(safe_builtins)
+    custom_builtins['__import__'] = safe_importer
+    
+    # Create the restricted globals with preloaded modules available
+    safe_globals = {
+        '__builtins__': custom_builtins,
+        '__name__': '__compute__',
+        **preloaded_modules,  # Make modules directly available without import
+    }
+    
+    # Add safe requests if available
+    safe_requests = create_safe_requests()
+    if safe_requests:
+        safe_globals['requests'] = safe_requests
+    
+    # Create locals dict for executed code
+    local_vars = {}
+    
+    # Execute the code to define the 'compute' function
+    exec(code, safe_globals, local_vars)
+    
+    # Check that 'compute' function was defined
+    if 'compute' not in local_vars:
+        raise ComputeExecutionError(
+            "Compute function must define a 'compute(data)' function"
+        )
+    
+    compute_func = local_vars['compute']
+    
+    if not callable(compute_func):
+        raise ComputeExecutionError("'compute' must be a callable function")
+    
+    # Call the compute function with input data
+    return compute_func(input_data)
 
 
 def execute_compute_function(
@@ -229,59 +319,13 @@ def execute_compute_function(
     Raises:
         ComputeError: If execution fails for any reason
     """
-    import importlib
-    
-    # Pre-import allowed modules and make them available
-    preloaded_modules = {}
-    for module_name in ALLOWED_MODULES:
-        try:
-            preloaded_modules[module_name] = importlib.import_module(module_name)
-        except ImportError:
-            pass  # Module not available, skip it
-    
-    # Create the safe importer instance
-    safe_importer = SafeImporter(ALLOWED_MODULES)
-    
-    # Create a custom __builtins__ dict that includes __import__
-    custom_builtins = dict(SAFE_BUILTINS)
-    custom_builtins['__import__'] = safe_importer
-    
-    # Create the restricted globals with preloaded modules available
-    safe_globals = {
-        '__builtins__': custom_builtins,
-        '__name__': '__compute__',
-        **preloaded_modules,  # Make modules directly available without import
-    }
-    
-    # Add safe requests if available
-    safe_requests = create_safe_requests()
-    if safe_requests:
-        safe_globals['requests'] = safe_requests
-    
-    # Create locals dict for executed code
-    local_vars = {}
-    
     try:
-        # Execute the code to define the 'compute' function (with timeout)
-        def exec_code():
-            exec(code, safe_globals, local_vars)
-        
-        run_with_timeout(exec_code, timeout=timeout)
-        
-        # Check that 'compute' function was defined
-        if 'compute' not in local_vars:
-            raise ComputeExecutionError(
-                "Compute function must define a 'compute(data)' function"
-            )
-        
-        compute_func = local_vars['compute']
-        
-        if not callable(compute_func):
-            raise ComputeExecutionError("'compute' must be a callable function")
-        
-        # Call the compute function with input data (with timeout)
-        result = run_with_timeout(compute_func, args=(input_data,), timeout=timeout)
-        
+        # Run in subprocess with timeout for true isolation and timeout enforcement
+        result = run_with_timeout(
+            _execute_in_sandbox,
+            args=(code, input_data, ALLOWED_MODULES, SAFE_BUILTINS),
+            timeout=timeout
+        )
         return result
         
     except ComputeError:

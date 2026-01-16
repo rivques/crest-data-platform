@@ -4,7 +4,7 @@ Service layer for sensor management, including dynamic table creation.
 
 import logging
 import re
-from django.db import connection, models
+from django.db import connection, models, transaction
 from django.utils import timezone
 
 from .models import Sensor, SensorApiKey
@@ -165,6 +165,9 @@ class SensorTableService:
         """
         Insert multiple readings in a batch.
         Returns the number of rows inserted.
+        
+        Uses a database transaction to ensure atomicity - either all readings
+        are inserted and stats updated, or none are (on error).
         """
         if not readings:
             return 0
@@ -195,15 +198,17 @@ class SensorTableService:
         # Flatten the rows_data for execute
         flat_values = [val for row in rows_data for val in row]
         
-        with connection.cursor() as cursor:
-            cursor.execute(sql, flat_values)
-            count = cursor.rowcount
-        
-        # Update sensor stats
-        Sensor.objects.filter(id=sensor.id).update(
-            last_reading_at=timezone.now(),
-            reading_count=models.F('reading_count') + count
-        )
+        # Use transaction to ensure atomicity of insert + stats update
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(sql, flat_values)
+                count = cursor.rowcount
+            
+            # Update sensor stats (only committed if insert succeeds)
+            Sensor.objects.filter(id=sensor.id).update(
+                last_reading_at=timezone.now(),
+                reading_count=models.F('reading_count') + count
+            )
         
         return count
 

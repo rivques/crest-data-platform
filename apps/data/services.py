@@ -2,10 +2,23 @@
 Service for querying sensor data from dynamic tables.
 """
 
+import re
 from django.db import connection
 from django.utils import timezone
 from datetime import datetime, timedelta
 from typing import Optional
+
+
+# Base columns that always exist in sensor tables
+BASE_ORDER_COLUMNS = {'timestamp', 'id', 'created_at', 'experiment_id'}
+
+# Valid intervals for aggregation queries
+VALID_INTERVALS = {'1 minute', '5 minutes', '15 minutes', '1 hour', '1 day'}
+
+
+def _validate_column_name(column: str) -> bool:
+    """Validate that a column name is safe (alphanumeric and underscore only)."""
+    return bool(re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', column))
 
 
 class DataQueryService:
@@ -20,16 +33,34 @@ class DataQueryService:
         limit: int = 1000,
         offset: int = 0,
         order_by: str = 'timestamp',
-        order_dir: str = 'DESC'
+        order_dir: str = 'DESC',
+        valid_columns: Optional[set] = None
     ) -> tuple[list[dict], int]:
         """
         Query data from a sensor's table.
+        
+        Args:
+            valid_columns: Optional set of valid column names from sensor schema.
+                          Used to validate order_by parameter.
         
         Returns (rows, total_count).
         """
         # Safety check
         if not table_name.startswith('sensor_'):
             raise ValueError("Invalid table name")
+        
+        # Validate order_by column to prevent SQL injection
+        # Must be either a base column or a valid schema column
+        allowed_order_columns = BASE_ORDER_COLUMNS.copy()
+        if valid_columns:
+            allowed_order_columns.update(valid_columns)
+        
+        order_by_lower = order_by.lower()
+        if order_by_lower not in allowed_order_columns:
+            raise ValueError(f"Invalid order_by column: '{order_by}'. Allowed: {sorted(allowed_order_columns)}")
+        
+        # Use the validated lowercase version
+        safe_order_by = order_by_lower
         
         # Build WHERE clause
         conditions = []
@@ -63,11 +94,11 @@ class DataQueryService:
             cursor.execute(count_sql, params)
             total_count = cursor.fetchone()[0]
         
-        # Get data
+        # Get data - safe_order_by has been validated against allowlist
         data_sql = f"""
         SELECT * FROM {table_name}
         {where_clause}
-        ORDER BY {order_by} {order_dir}
+        ORDER BY {safe_order_by} {order_dir}
         LIMIT %s OFFSET %s
         """
         
@@ -106,21 +137,41 @@ class DataQueryService:
         interval: str = '1 hour',
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
-        experiment_id: Optional[str] = None
+        experiment_id: Optional[str] = None,
+        valid_columns: Optional[set] = None
     ) -> list[dict]:
         """
         Get time-bucketed aggregated data.
         
-        aggregation: 'avg', 'min', 'max', 'sum', 'count'
-        interval: PostgreSQL interval string (e.g., '1 hour', '15 minutes', '1 day')
+        Args:
+            aggregation: 'avg', 'min', 'max', 'sum', 'count'
+            interval: Time bucket interval - must be one of VALID_INTERVALS
+            valid_columns: Optional set of valid column names from sensor schema.
+                          Used to validate column parameter.
         """
         if not table_name.startswith('sensor_'):
             raise ValueError("Invalid table name")
         
         # Validate aggregation
-        valid_aggs = ['avg', 'min', 'max', 'sum', 'count']
+        valid_aggs = {'avg', 'min', 'max', 'sum', 'count'}
         if aggregation.lower() not in valid_aggs:
-            raise ValueError(f"Invalid aggregation. Use one of: {valid_aggs}")
+            raise ValueError(f"Invalid aggregation. Use one of: {sorted(valid_aggs)}")
+        
+        # Validate interval to prevent SQL injection
+        if interval not in VALID_INTERVALS:
+            raise ValueError(f"Invalid interval: '{interval}'. Allowed: {sorted(VALID_INTERVALS)}")
+        
+        # Validate column name format and against schema
+        if not _validate_column_name(column):
+            raise ValueError(f"Invalid column name format: '{column}'")
+        
+        column_lower = column.lower()
+        if valid_columns is not None:
+            if column_lower not in valid_columns and column_lower != 'timestamp':
+                raise ValueError(f"Column '{column}' not found in sensor schema")
+        
+        safe_column = column_lower
+        safe_aggregation = aggregation.upper()
         
         # Build WHERE clause
         conditions = []
@@ -142,27 +193,38 @@ class DataQueryService:
         if conditions:
             where_clause = "WHERE " + " AND ".join(conditions)
         
-        sql = f"""
-        SELECT 
-            date_trunc('hour', timestamp) + 
-            (EXTRACT(minute FROM timestamp)::int / 
-             EXTRACT(epoch FROM interval '{interval}')::int * 
-             EXTRACT(epoch FROM interval '{interval}')::int) * interval '1 second' AS bucket,
-            {aggregation.upper()}({column}) as value,
-            COUNT(*) as count
-        FROM {table_name}
-        {where_clause}
-        GROUP BY bucket
-        ORDER BY bucket ASC
-        """
+        # Use date_trunc for common intervals (validated above)
+        # Map interval to PostgreSQL date_trunc precision
+        interval_to_trunc = {
+            '1 minute': 'minute',
+            '5 minutes': 'minute',  # Will use more complex bucketing
+            '15 minutes': 'minute',  # Will use more complex bucketing
+            '1 hour': 'hour',
+            '1 day': 'day',
+        }
         
-        # Simpler approach using date_trunc for common intervals
+        truncate_to = interval_to_trunc.get(interval)
+        
         if interval in ['1 hour', '1 day', '1 minute']:
-            truncate_to = interval.split()[1]
+            # Simple date_trunc for exact intervals
             sql = f"""
             SELECT 
                 date_trunc('{truncate_to}', timestamp) AS bucket,
-                {aggregation.upper()}({column}) as value,
+                {safe_aggregation}({safe_column}) as value,
+                COUNT(*) as count
+            FROM {table_name}
+            {where_clause}
+            GROUP BY bucket
+            ORDER BY bucket ASC
+            """
+        else:
+            # For 5/15 minute intervals, use time bucketing
+            minutes = int(interval.split()[0])
+            sql = f"""
+            SELECT 
+                date_trunc('hour', timestamp) + 
+                (EXTRACT(minute FROM timestamp)::int / {minutes} * {minutes}) * interval '1 minute' AS bucket,
+                {safe_aggregation}({safe_column}) as value,
                 COUNT(*) as count
             FROM {table_name}
             {where_clause}
@@ -178,18 +240,29 @@ class DataQueryService:
         return rows
     
     @staticmethod
-    def get_sensor_stats(table_name: str, column: str) -> dict:
+    def get_sensor_stats(table_name: str, column: str, valid_columns: Optional[set] = None) -> dict:
         """Get statistics for a numeric column."""
         if not table_name.startswith('sensor_'):
             raise ValueError("Invalid table name")
         
+        # Validate column name format
+        if not _validate_column_name(column):
+            raise ValueError(f"Invalid column name format: '{column}'")
+        
+        column_lower = column.lower()
+        if valid_columns is not None:
+            if column_lower not in valid_columns:
+                raise ValueError(f"Column '{column}' not found in sensor schema")
+        
+        safe_column = column_lower
+        
         sql = f"""
         SELECT 
             COUNT(*) as count,
-            MIN({column}) as min,
-            MAX({column}) as max,
-            AVG({column}) as avg,
-            STDDEV({column}) as stddev,
+            MIN({safe_column}) as min,
+            MAX({safe_column}) as max,
+            AVG({safe_column}) as avg,
+            STDDEV({safe_column}) as stddev,
             MIN(timestamp) as first_reading,
             MAX(timestamp) as last_reading
         FROM {table_name}
@@ -199,4 +272,5 @@ class DataQueryService:
             cursor.execute(sql)
             columns = [col[0] for col in cursor.description]
             row = cursor.fetchone()
-            return dict(zip(columns, row))
+            return dict(zip(columns, row)) if row else {}
+

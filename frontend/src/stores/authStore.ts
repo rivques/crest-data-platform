@@ -10,11 +10,13 @@ interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
+  _hasHydrated: boolean
   
   login: (username: string, password: string) => Promise<void>
   logout: () => void
   setTokens: (access: string, refresh: string) => void
   fetchUser: () => Promise<void>
+  initializeAuth: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -26,6 +28,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      _hasHydrated: false,
       
       login: async (username: string, password: string) => {
         set({ isLoading: true, error: null })
@@ -78,7 +81,18 @@ export const useAuthStore = create<AuthState>()(
           const response = await api.get('/auth/profile/')
           set({ user: response.data })
         } catch (error) {
-          console.error('Failed to fetch user profile:', error)
+          // If fetching user fails (e.g., token expired), log out
+          if (import.meta.env.DEV) {
+            console.error('Failed to fetch user profile:', error)
+          }
+        }
+      },
+      
+      initializeAuth: async () => {
+        // Called after hydration to fetch user if tokens exist
+        const state = get()
+        if (state.isAuthenticated && state.accessToken && !state.user) {
+          await state.fetchUser()
         }
       },
     }),
@@ -89,6 +103,15 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => async (state) => {
+        // After hydration, fetch user if authenticated
+        if (state) {
+          state._hasHydrated = true
+          if (state.isAuthenticated && state.accessToken) {
+            await state.fetchUser()
+          }
+        }
+      },
     }
   )
 )

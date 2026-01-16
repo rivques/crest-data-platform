@@ -31,6 +31,9 @@ class UserCreateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         validated_data.pop('password_confirm')
+        # Explicitly set role to VIEWER to prevent role escalation attacks
+        # Admin users must be promoted through admin interface or management commands
+        validated_data['role'] = User.Role.VIEWER
         user = User.objects.create_user(**validated_data)
         return user
 

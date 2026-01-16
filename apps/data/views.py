@@ -43,6 +43,9 @@ class SensorDataView(APIView):
         
         params = serializer.validated_data
         
+        # Get valid columns from sensor schema for validation
+        valid_columns = set(k.lower() for k in sensor.column_schema.keys())
+        
         # Query data
         try:
             rows, total_count = DataQueryService.query_sensor_data(
@@ -54,6 +57,12 @@ class SensorDataView(APIView):
                 offset=params.get('offset', 0),
                 order_by=params.get('order_by', 'timestamp'),
                 order_dir=params.get('order_dir', 'desc'),
+                valid_columns=valid_columns,
+            )
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
             return Response(
@@ -131,8 +140,11 @@ class SensorAggregateView(APIView):
         
         params = serializer.validated_data
         
+        # Get valid columns from sensor schema for validation
+        valid_columns = set(k.lower() for k in sensor.column_schema.keys())
+        
         # Verify column exists in schema
-        if params['column'] not in sensor.column_schema and params['column'] != 'timestamp':
+        if params['column'].lower() not in valid_columns and params['column'].lower() != 'timestamp':
             return Response(
                 {'error': f"Column '{params['column']}' not found in sensor schema."},
                 status=status.HTTP_400_BAD_REQUEST
@@ -147,6 +159,12 @@ class SensorAggregateView(APIView):
                 start_time=params.get('start_time'),
                 end_time=params.get('end_time'),
                 experiment_id=str(params['experiment_id']) if params.get('experiment_id') else None,
+                valid_columns=valid_columns,
+            )
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
             return Response(
@@ -189,14 +207,26 @@ class SensorStatsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if column not in sensor.column_schema:
+        # Get valid columns from sensor schema for validation
+        valid_columns = set(k.lower() for k in sensor.column_schema.keys())
+        
+        if column.lower() not in valid_columns:
             return Response(
                 {'error': f"Column '{column}' not found in sensor schema."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         try:
-            stats = DataQueryService.get_sensor_stats(sensor.table_name, column)
+            stats = DataQueryService.get_sensor_stats(
+                sensor.table_name, 
+                column,
+                valid_columns=valid_columns
+            )
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             return Response(
                 {'error': 'Stats query failed.', 'detail': str(e)},

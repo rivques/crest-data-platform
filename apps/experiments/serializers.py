@@ -5,8 +5,13 @@ from .models import Experiment, Document
 class ExperimentSerializer(serializers.ModelSerializer):
     """Serializer for experiment details."""
     
-    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
-    sensor_count = serializers.SerializerMethodField()
+    created_by_username = serializers.CharField(
+        source='created_by.username', 
+        read_only=True,
+        allow_null=True,
+        default=None
+    )
+    sensor_count = serializers.IntegerField(read_only=True, default=0)
     
     class Meta:
         model = Experiment
@@ -17,9 +22,6 @@ class ExperimentSerializer(serializers.ModelSerializer):
             'sensor_count'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
-    
-    def get_sensor_count(self, obj):
-        return obj.sensors.count() if hasattr(obj, 'sensors') else 0
 
 
 class ExperimentCreateSerializer(serializers.ModelSerializer):

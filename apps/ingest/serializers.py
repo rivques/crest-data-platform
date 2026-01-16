@@ -1,5 +1,11 @@
 from rest_framework import serializers
 from django.utils import timezone
+import json
+
+# Maximum size limits for ingest data to prevent memory exhaustion
+MAX_READING_SIZE_BYTES = 10 * 1024  # 10KB per reading
+MAX_STRING_VALUE_LENGTH = 10000  # 10K characters for string values
+MAX_TOTAL_PAYLOAD_BYTES = 5 * 1024 * 1024  # 5MB total payload
 
 
 class ReadingSerializer(serializers.Serializer):
@@ -27,6 +33,26 @@ class ReadingSerializer(serializers.Serializer):
         return ret
 
 
+def validate_reading_size(reading: dict) -> None:
+    """Validate that a single reading doesn't exceed size limits."""
+    # Check serialized size
+    try:
+        reading_json = json.dumps(reading)
+        if len(reading_json.encode('utf-8')) > MAX_READING_SIZE_BYTES:
+            raise serializers.ValidationError(
+                f"Individual reading exceeds maximum size of {MAX_READING_SIZE_BYTES} bytes"
+            )
+    except (TypeError, ValueError) as e:
+        raise serializers.ValidationError(f"Reading contains non-serializable data: {e}")
+    
+    # Check string value lengths
+    for key, value in reading.items():
+        if isinstance(value, str) and len(value) > MAX_STRING_VALUE_LENGTH:
+            raise serializers.ValidationError(
+                f"String value for '{key}' exceeds maximum length of {MAX_STRING_VALUE_LENGTH} characters"
+            )
+
+
 class IngestRequestSerializer(serializers.Serializer):
     """Serializer for the ingest API request."""
     
@@ -38,6 +64,17 @@ class IngestRequestSerializer(serializers.Serializer):
         max_length=1000,  # Batch limit
         help_text="Array of readings to ingest"
     )
+    
+    def validate_readings(self, value):
+        """Validate readings don't exceed size limits."""
+        for i, reading in enumerate(value):
+            try:
+                validate_reading_size(reading)
+            except serializers.ValidationError as e:
+                raise serializers.ValidationError(
+                    f"Reading {i}: {getattr(e, 'detail', str(e))}"
+                )
+        return value
 
 
 class IngestResponseSerializer(serializers.Serializer):

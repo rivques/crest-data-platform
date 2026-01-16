@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.db.models import Count
 
 from .models import Experiment, Document
 from .serializers import ExperimentSerializer, ExperimentCreateSerializer, DocumentSerializer
@@ -22,7 +23,8 @@ class ExperimentViewSet(viewsets.ModelViewSet):
         return ExperimentSerializer
     
     def get_queryset(self):
-        queryset = Experiment.objects.all()
+        # Use annotate to efficiently count sensors (avoids N+1 query)
+        queryset = Experiment.objects.annotate(sensor_count=Count('sensors'))
         
         # Filter by active status
         is_active = self.request.query_params.get('is_active')

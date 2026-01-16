@@ -6,8 +6,18 @@ from .schemas import ALLOWED_COLUMN_TYPES, validate_column_schema
 class SensorSerializer(serializers.ModelSerializer):
     """Serializer for sensor details."""
     
-    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
-    experiment_name = serializers.CharField(source='experiment.name', read_only=True, allow_null=True)
+    created_by_username = serializers.CharField(
+        source='created_by.username', 
+        read_only=True, 
+        allow_null=True,
+        default=None
+    )
+    experiment_name = serializers.CharField(
+        source='experiment.name', 
+        read_only=True, 
+        allow_null=True,
+        default=None
+    )
     api_key_count = serializers.SerializerMethodField()
     computed_field_error_count = serializers.SerializerMethodField()
     
@@ -75,8 +85,18 @@ class SensorUpdateSerializer(serializers.ModelSerializer):
 class SensorApiKeySerializer(serializers.ModelSerializer):
     """Serializer for API key details (without the actual key)."""
     
-    sensor_name = serializers.CharField(source='sensor.name', read_only=True)
-    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    sensor_name = serializers.CharField(
+        source='sensor.name', 
+        read_only=True,
+        allow_null=True,
+        default=None
+    )
+    created_by_username = serializers.CharField(
+        source='created_by.username', 
+        read_only=True,
+        allow_null=True,
+        default=None
+    )
     
     class Meta:
         model = SensorApiKey
@@ -129,7 +149,12 @@ class ColumnTypesSerializer(serializers.Serializer):
 class ComputedFieldErrorSerializer(serializers.ModelSerializer):
     """Serializer for computed field error details."""
     
-    sensor_name = serializers.CharField(source='sensor.name', read_only=True)
+    sensor_name = serializers.CharField(
+        source='sensor.name', 
+        read_only=True,
+        allow_null=True,
+        default=None
+    )
     
     class Meta:
         model = ComputedFieldError
