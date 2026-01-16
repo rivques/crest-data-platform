@@ -701,6 +701,28 @@ def compute(data):
         with pytest.raises(ComputeExecutionError):
             execute_compute_function(code, {})
     
+    def test_requests_module_blocked(self):
+        """Test that direct import of requests is blocked."""
+        code = """
+def compute(data):
+    import requests
+    return requests.get('http://example.com').status_code
+"""
+        with pytest.raises(ComputeSecurityError) as exc_info:
+            execute_compute_function(code, {})
+        assert "Direct import of 'requests' is not allowed" in str(exc_info.value)
+    
+    def test_request_get_available(self):
+        """Test that requests.get and requests.post are available."""
+        code = """
+def compute(data):
+    response = requests.get('https://httpbin.org/get')
+    return response.status_code
+"""
+        result = execute_compute_function(code, {})
+        assert result == 200
+
+
     def test_timeout_enforcement(self):
         """Test that compute functions timeout properly (thread-safe)."""
         code = """

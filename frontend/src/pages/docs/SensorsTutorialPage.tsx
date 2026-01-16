@@ -1,41 +1,16 @@
-import { ArrowRight, AlertTriangle, Info } from 'lucide-react'
+import { AlertTriangle, Info } from 'lucide-react'
 import { CodeBlock } from '../../components/docs'
 
 export default function SensorsTutorialPage() {
   return (
     <article className="prose prose-primary max-w-none">
-      <h1>Sensors & Experiments</h1>
+      <h1>Sensors & Experiments Setup</h1>
       <p className="lead text-xl text-gray-600">
         Create experiments, define sensor schemas, issue API keys, and send data from devices.
       </p>
 
-      <h2>Concepts Overview</h2>
-      <div className="not-prose bg-gray-50 rounded-lg p-6 my-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm text-gray-700">
-          <div>
-            <div className="font-semibold">Experiment</div>
-            <div className="text-gray-500">Container for related sensors.</div>
-          </div>
-          <ArrowRight className="text-gray-400 hidden md:block" />
-          <div>
-            <div className="font-semibold">Sensor</div>
-            <div className="text-gray-500">Has a custom data schema.</div>
-          </div>
-          <ArrowRight className="text-gray-400 hidden md:block" />
-          <div>
-            <div className="font-semibold">API Key</div>
-            <div className="text-gray-500">Authenticates the device.</div>
-          </div>
-          <ArrowRight className="text-gray-400 hidden md:block" />
-          <div>
-            <div className="font-semibold">Data</div>
-            <div className="text-gray-500">Stored in a typed table.</div>
-          </div>
-        </div>
-      </div>
-
       <h2>Step 1: Create an Experiment</h2>
-      <p>Experiments group related sensors (e.g., a greenhouse study with temp, humidity, and light sensors).</p>
+      <p>Experiments separate different runs of the same sensor (e.g. a lab test of a sensor vs its field deployment) and group related sensors (e.g., a greenhouse study with temp, humidity, and light sensors).</p>
 
       <h3>Using the Web Interface</h3>
       <ol>
@@ -43,25 +18,15 @@ export default function SensorsTutorialPage() {
         <li>Click <strong>New Experiment</strong></li>
         <li>Fill in the details:
           <ul>
-            <li><strong>Name</strong> – A descriptive name (e.g., "Greenhouse Monitoring 2025")</li>
+            <li><strong>Name</strong> – A descriptive name (e.g., "Greenhouse Monitoring 2026")</li>
             <li><strong>Description</strong> – What this experiment is studying</li>
           </ul>
         </li>
         <li>Click <strong>Create</strong></li>
       </ol>
 
-      <h3>Using the API</h3>
-      <CodeBlock language="bash" code={`# Replace example.com with your actual domain (or use localhost:8000 for local dev)
-curl -X POST https://example.com/api/experiments/ \\
-  -H "Authorization: Bearer <your-jwt-token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "name": "Greenhouse Monitoring 2025",
-    "description": "Monitor temperature and humidity in greenhouse beds"
-  }'`} />
-
       <h2>Step 2: Create a Sensor</h2>
-      <p>Sensors represent devices. Each sensor has a custom schema defining its columns.</p>
+      <p>Sensors represent devices. Each sensor has a custom schema defining the kinds of data it reports.</p>
 
       <h3>Defining a Schema</h3>
       <p>Specify columns and PostgreSQL types when creating a sensor; a dedicated table is created for that schema.</p>
@@ -101,21 +66,6 @@ curl -X POST https://example.com/api/experiments/ \\
         </li>
         <li>Click <strong>Create</strong></li>
       </ol>
-
-      <h3>Using the API</h3>
-      <CodeBlock language="bash" code={`# Replace example.com with your domain (or use localhost:8000 for local dev)
-curl -X POST https://example.com/api/sensors/ \\
-  -H "Authorization: Bearer <your-jwt-token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "experiment": "<experiment-uuid>",
-    "name": "DHT22 Sensor - Bed A",
-    "description": "Temperature and humidity sensor in greenhouse bed A",
-    "column_schema": {
-      "temp_c": "REAL",
-      "relative_humidity": "REAL"
-    }
-  }'`} />
 
       <h3>Example Schemas</h3>
       <div className="not-prose grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
@@ -158,13 +108,12 @@ curl -X POST https://example.com/api/sensors/ \\
 
       <h2>Computed Fields</h2>
       <p>
-        Computed fields allow you to calculate values on the server when data arrives. This is useful for:
+        Computed fields are a feature that allows you to calculate values on the server when data arrives. This is useful for:
       </p>
       <ul>
         <li><strong>Offloading computation</strong> from embedded devices (e.g., converting raw ADC values to temperature)</li>
         <li><strong>Adding contextual data</strong> (e.g., fetching weather data from an API)</li>
-        <li><strong>Unit conversions</strong> (e.g., Celsius to Fahrenheit)</li>
-        <li><strong>Complex calculations</strong> (e.g., heat index from temperature and humidity)</li>
+        <li><strong>Adding unit conversions</strong> (e.g., Celsius to Fahrenheit)</li>
       </ul>
 
       <h3>Defining a Computed Field</h3>
@@ -193,6 +142,7 @@ curl -X POST https://example.com/api/sensors/ \\
           <li>• Must define a function called <code className="bg-blue-100 px-1 rounded">compute(data)</code></li>
           <li>• The <code className="bg-blue-100 px-1 rounded">data</code> parameter contains all non-computed sensor fields</li>
           <li>• Return the computed value (must match the column type)</li>
+          <li>• Maximum execution time: 15 seconds</li>
           <li>• Runs in a sandboxed environment with limited access</li>
         </ul>
       </div>
@@ -206,7 +156,7 @@ curl -X POST https://example.com/api/sensors/ \\
             <li>• <code>statistics</code> module</li>
             <li>• <code>datetime</code> module</li>
             <li>• <code>json</code> module</li>
-            <li>• <code>requests</code> for HTTP calls</li>
+            <li>• <code>requests</code> for HTTP calls (automatically imported)</li>
             <li>• <code>re</code> for regex</li>
             <li>• Basic Python builtins (int, float, str, list, dict, etc.)</li>
           </ul>
@@ -217,10 +167,13 @@ curl -X POST https://example.com/api/sensors/ \\
             <li>• File system access (open, os, etc.)</li>
             <li>• System commands (subprocess, etc.)</li>
             <li>• Network access except HTTP</li>
-            <li>• Infinite loops (5 second timeout)</li>
+            <li>• Infinite loops (15 second timeout)</li>
           </ul>
         </div>
       </div>
+      <p>Note: These restrictions are intended as a defense against mistakes, not against malicious attacks.
+        Do not give platform access to untrusted users.
+      </p>
 
       <h3>Example: Temperature Conversion</h3>
       <CodeBlock language="python" code={`def compute(data):
@@ -262,7 +215,8 @@ curl -X POST https://example.com/api/sensors/ \\
       <p>
         If a compute function fails (syntax error, runtime error, timeout), the field value will be 
         <code className="bg-gray-100 px-1 rounded">NULL</code> and an error will be logged. You can view 
-        errors in the sensor's detail page in the web interface.
+        errors in the sensor's detail page in the web interface. This should be checked every
+        so often to ensure compute functions are running correctly.
       </p>
 
       <h2>Step 3: Generate an API Key</h2>
@@ -289,16 +243,6 @@ curl -X POST https://example.com/api/sensors/ \\
         <li>Click <strong>Create</strong></li>
         <li><strong>Copy and save the displayed API key immediately!</strong></li>
       </ol>
-
-      <h3>Using the API</h3>
-      <CodeBlock language="bash" code={`# Replace example.com with your domain
-curl -X POST https://example.com/api/api-keys/ \\
-  -H "Authorization: Bearer <your-jwt-token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "sensor": "<sensor-uuid>",
-    "name": "Production Device"
-  }'`} />
 
       <h2>Step 4: Send Data from Your Device</h2>
       <p>Use the ingestion endpoint to send JSON readings once the sensor and API key are ready.</p>
@@ -454,18 +398,6 @@ void sendReading(float temp_c, float humidity) {
         <li>The configuration file will be saved to your downloads folder</li>
       </ol>
 
-      <p><strong>Using the API:</strong></p>
-      <CodeBlock language="bash" code={`# Export sensor configuration
-curl "https://example.com/api/sensors/<sensor-id>/export_config/" \\
-  -H "Authorization: Bearer <jwt-token>" \\
-  -o sensor_config.json
-
-# The exported file contains:
-# - Sensor name and type
-# - Description and metadata
-# - Full column schema (including computed fields)
-# - Does NOT include: IDs, API keys, statistics, or user info`} />
-
       <h3>Importing a Sensor Configuration</h3>
       <p><strong>Using the Web Interface:</strong></p>
       <ol>
@@ -481,52 +413,6 @@ curl "https://example.com/api/sensors/<sensor-id>/export_config/" \\
         <li>Click <strong>Import Sensor</strong></li>
       </ol>
 
-      <p><strong>Using the API:</strong></p>
-      <CodeBlock language="bash" code={`# Import sensor configuration
-curl -X POST "https://example.com/api/sensors/import/" \\
-  -H "Authorization: Bearer <jwt-token>" \\
-  -H "Content-Type: application/json" \\
-  -d @- << 'EOF'
-{
-  "config": {
-    "config_format_version": "1.0",
-    "sensor": {
-      "name": "DHT22 Sensor",
-      "sensor_type": "temperature",
-      "description": "Temperature and humidity",
-      "metadata": {},
-      "column_schema": {
-        "temp_c": "DOUBLE PRECISION",
-        "humidity": "DOUBLE PRECISION"
-      }
-    }
-  },
-  "name_override": "DHT22 Sensor - Production",
-  "experiment": "<experiment-uuid>"
-}
-EOF`} />
-
-      <h3>Example Use Cases</h3>
-      <div className="not-prose grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h4 className="font-semibold text-gray-900 mb-2">Development to Production</h4>
-          <ol className="text-sm text-gray-700 space-y-1 ml-4">
-            <li>Design sensor schema in dev environment</li>
-            <li>Export the configuration once finalized</li>
-            <li>Import into production with a new name</li>
-            <li>Generate new API keys for production use</li>
-          </ol>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h4 className="font-semibold text-gray-900 mb-2">Sensor Fleet Deployment</h4>
-          <ol className="text-sm text-gray-700 space-y-1 ml-4">
-            <li>Create one sensor with desired schema</li>
-            <li>Export the configuration</li>
-            <li>Import multiple times with different names</li>
-            <li>Each gets its own API key and data table</li>
-          </ol>
-        </div>
-      </div>
 
       <div className="not-prose bg-yellow-50 border border-yellow-200 rounded-lg p-4 my-6">
         <div className="flex items-start gap-2">
@@ -548,27 +434,9 @@ EOF`} />
         Once data is flowing, you can view it in several ways:
       </p>
       <ul>
-        <li><strong>Data Explorer</strong> – Built-in viewer in this web interface</li>
+        <li><a href="/data"><strong>Raw Data Explorer</strong></a> – Basic viewer in this web interface</li>
         <li><strong>Grafana</strong> – Create rich dashboards (see next section)</li>
-        <li><strong>API</strong> – Query programmatically via REST endpoints</li>
       </ul>
-
-      <h3>Data Query API</h3>
-      <CodeBlock language="bash" code={`# For production (replace example.com with your domain)
-curl "https://example.com/api/data/<sensor-id>/?limit=100" \\
-  -H "Authorization: Bearer <jwt-token>"
-
-# For local development
-curl "http://localhost:8000/api/data/<sensor-id>/?limit=100" \\
-  -H "Authorization: Bearer <jwt-token>"
-
-# Get latest reading
-curl "http://localhost:8000/api/data/<sensor-id>/latest/" \\
-  -H "Authorization: Bearer <jwt-token>"
-
-# Get statistics
-curl "http://localhost:8000/api/data/<sensor-id>/stats/" \\
-  -H "Authorization: Bearer <jwt-token>"`} />
 
       <div className="not-prose bg-green-50 border border-green-200 rounded-lg p-6 mt-8">
         <h3 className="font-semibold text-green-800 mb-2">✓ Sensor Configured!</h3>

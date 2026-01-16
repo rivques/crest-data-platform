@@ -1,13 +1,14 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { BookOpen, Server, Rocket, Cpu, LineChart, ArrowLeft, Cloud } from 'lucide-react'
+import { BookOpen, Server, Rocket, Cpu, LineChart, ArrowLeft, Cloud, Code2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 const docSections = [
   { path: '/docs', label: 'Overview', icon: BookOpen, end: true },
-  { path: '/docs/setup', label: 'System Setup', icon: Server, end: false },
-  { path: '/docs/sensors', label: 'Sensors & Experiments', icon: Cpu, end: false },
+  { path: '/docs/sensors', label: 'Sensors & Experiments Setup', icon: Cpu, end: false },
   { path: '/docs/grafana', label: 'Grafana Visualization', icon: LineChart, end: false },
+  { path: '/docs/setup', label: 'Development Setup', icon: Server, end: false },
   { path: '/docs/deployment', label: 'Production Deployment', icon: Cloud, end: false },
+  { path: '/docs/api', label: 'API Guide', icon: Code2, end: false },
 ]
 
 export default function DocsLayout() {

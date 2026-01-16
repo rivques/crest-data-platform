@@ -14,7 +14,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Maximum execution time for compute functions (seconds)
-COMPUTE_TIMEOUT = 5
+COMPUTE_TIMEOUT = 15
 
 # Safe built-in functions allowed in compute functions
 SAFE_BUILTINS = {
@@ -97,10 +97,16 @@ class SafeImporter:
         top_level = name.split('.')[0]
         
         if top_level not in self.allowed_modules:
-            raise ComputeSecurityError(
-                f"Import of '{name}' is not allowed. "
-                f"Allowed modules: {', '.join(sorted(self.allowed_modules))}"
-            )
+            if top_level == "requests":
+                raise ComputeSecurityError(
+                    "Direct import of 'requests' is not allowed. "
+                    "requests.get and requests.post are already in scope."
+                )
+            else:
+                raise ComputeSecurityError(
+                    f"Import of '{name}' is not allowed. "
+                    f"Allowed modules: {', '.join(sorted(self.allowed_modules))}"
+                )
         
         # Use cached import if available
         if name in self._imported:

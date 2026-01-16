@@ -13,6 +13,7 @@ import SetupPage from './pages/docs/SetupPage'
 import SensorsTutorialPage from './pages/docs/SensorsTutorialPage'
 import GrafanaPage from './pages/docs/GrafanaPage'
 import DeploymentPage from './pages/docs/DeploymentPage'
+import ApiGuidePage from './pages/docs/ApiGuidePage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -47,6 +48,7 @@ function App() {
         <Route path="/docs" element={<DocsLayout />}>
           <Route index element={<OverviewPage />} />
           <Route path="setup" element={<SetupPage />} />
+          <Route path="api" element={<ApiGuidePage />} />
           <Route path="sensors" element={<SensorsTutorialPage />} />
           <Route path="grafana" element={<GrafanaPage />} />
           <Route path="deployment" element={<DeploymentPage />} />

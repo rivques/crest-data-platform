@@ -5,11 +5,12 @@ import {
   FlaskConical,
   Cpu,
   Key,
-  BarChart3,
   LogOut,
   Menu,
   X,
   Book,
+  LineChart,
+  Table,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -18,7 +19,8 @@ const navItems = [
   { path: '/experiments', label: 'Experiments', icon: FlaskConical },
   { path: '/sensors', label: 'Sensors', icon: Cpu },
   { path: '/api-keys', label: 'API Keys', icon: Key },
-  { path: '/data', label: 'Data Explorer', icon: BarChart3 },
+  { path: '/data', label: 'Raw Data Explorer', icon: Table },
+  { path: '/grafana', label: 'Grafana Charts', icon: LineChart}, // NOTE: won't work for local dev without proxy
   { path: '/docs', label: 'Documentation', icon: Book },
 ]
 

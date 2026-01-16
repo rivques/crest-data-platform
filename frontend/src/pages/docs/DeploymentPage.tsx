@@ -207,7 +207,7 @@ docker compose -f docker-compose-prod.yml logs web | grep -i error`} />
           admin for editing.
         </li>
         <li>Log in with the admin password you configured for <code className="bg-gray-100 px-1 rounded">GRAFANA_ADMIN_PASSWORD</code></li>
-        <li>Configure PostgreSQL data source (already provisioned, but verify)</li>
+        <li>Configure PostgreSQL data source (Connections-&gt;Data sources)</li>
         <li>Create dashboards for key metrics</li>
       </ol>
 
@@ -230,16 +230,16 @@ curl -I https://example.com | grep -i "strict-transport"
       <p>To update the application after code changes:</p>
 
       <CodeBlock code={`# Pull latest changes
-    git pull origin main
+git pull origin main
 
-    # Rebuild and restart services
-    docker compose -f docker-compose-prod.yml up -d --build
+# Rebuild and restart services
+docker compose -f docker-compose-prod.yml up -d --build
 
-    # Run migrations (if you don't rely on container startup doing it)
-    docker compose -f docker-compose-prod.yml exec web python manage.py migrate
+# Run migrations (if you don't rely on container startup doing it)
+docker compose -f docker-compose-prod.yml exec web python manage.py migrate
 
-    # Check status
-    docker compose -f docker-compose-prod.yml logs -f web`} />
+# Check status
+docker compose -f docker-compose-prod.yml logs -f web`} />
 
       <h2>Security Considerations</h2>
 
@@ -263,7 +263,6 @@ curl -I https://example.com | grep -i "strict-transport"
           </h4>
           <ul className="text-red-700 text-sm space-y-2 ml-4">
             <li>• Close unnecessary ports (only allow 22/SSH, 80/HTTP, 443/HTTPS)</li>
-            <li>• Grafana is served at <code className="bg-red-100 px-1 rounded">/grafana/</code>, so no extra port needs to be opened</li>
             <li>• Restrict SSH access (use key-based auth, disable root login)</li>
             <li>• Database should only be accessible from the Django container</li>
             <li>• Consider a WAF (Web Application Firewall) for additional protection</li>
@@ -277,7 +276,6 @@ curl -I https://example.com | grep -i "strict-transport"
           </h4>
           <ul className="text-red-700 text-sm space-y-2 ml-4">
             <li>• Keep OS packages updated (<code className="bg-red-100 px-1 rounded">apt upgrade</code>)</li>
-            <li>• Rotate API keys periodically</li>
             <li>• Monitor logs for errors and suspicious activity</li>
             <li>• Test backups regularly to ensure recovery works</li>
             <li>• Review Django security checklist: <code className="bg-red-100 px-1 rounded">python manage.py check --deploy</code></li>

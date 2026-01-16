@@ -4,7 +4,7 @@ import { CodeBlock, Step } from '../../components/docs'
 export default function SetupPage() {
   return (
     <article className="prose prose-primary max-w-none">
-      <h1>System Setup</h1>
+      <h1>Development Setup</h1>
       <p className="lead text-xl text-gray-600">
         Get the CREST stack running locally for development. For production deployment, see the Production Deployment guide.
       </p>
@@ -150,12 +150,13 @@ docker compose down -v`} />
             <Terminal size={18} />
             Run tests
           </h4>
-          <CodeBlock code={`docker compose exec web pytest`} />
+          <CodeBlock code={`docker compose exec web pytest
+docker compose exec frontend npm run test:run`} />
         </div>
       </div>
 
-      <h2>Local Development (Without Docker)</h2>
-      <p>For active development, you can run services locally instead of Docker:</p>
+      <h2>Local Development (Without Docker, not recommended)</h2>
+      <p>If you really want to, you can run services locally instead of Docker:</p>
 
       <div className="not-prose">
         <Step number={1} title="Set up Python environment">
