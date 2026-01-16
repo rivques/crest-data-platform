@@ -1,5 +1,3 @@
-import { Database, Server, Monitor, BarChart3, Shield, Zap } from 'lucide-react'
-
 export default function OverviewPage() {
   return (
     <article className="prose prose-primary max-w-none">

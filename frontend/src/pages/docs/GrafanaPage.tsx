@@ -1,4 +1,4 @@
-import { ExternalLink, AlertTriangle } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { CodeBlock, Step } from '../../components/docs'
 
 export default function GrafanaPage() {
