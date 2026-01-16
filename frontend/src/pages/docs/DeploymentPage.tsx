@@ -209,6 +209,7 @@ docker compose -f docker-compose-prod.yml logs web | grep -i error`} />
         <li>Log in with the admin password you configured for <code className="bg-gray-100 px-1 rounded">GRAFANA_ADMIN_PASSWORD</code></li>
         <li>Configure PostgreSQL data source (Connections-&gt;Data sources)</li>
         <li>Create dashboards for key metrics</li>
+        <li>Set up a default dashboard in Administration-&gt;General-&gt;Default preferences</li>
       </ol>
 
       <h3>Verify HTTPS</h3>

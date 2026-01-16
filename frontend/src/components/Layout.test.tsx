@@ -95,6 +95,14 @@ describe('Layout', () => {
     expect(screen.getByText('Documentation').closest('a')).toHaveAttribute('href', '/docs')
   })
 
+  it('opens Grafana link in new tab', () => {
+    renderLayout()
+
+    const grafanaLink = screen.getByText('Grafana Charts').closest('a')
+    expect(grafanaLink).toHaveAttribute('target', '_blank')
+    expect(grafanaLink).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
   it('toggles mobile sidebar when menu button is clicked', async () => {
     const user = userEvent.setup()
     renderLayout()
